@@ -4,10 +4,10 @@ namespace Cnab\Remessa\Cnab240;
 
 class Detalhe
 {
-    public $segmento_p;
-    public $segmento_q;
-    public $segmento_r;
-    public $segmento_a;
+    public $segmento_p = NULL;
+    public $segmento_q = NULL;
+    public $segmento_r = NULL;
+    public $segmento_a = NULL;
 
     public $last_error;
 
@@ -42,12 +42,22 @@ class Detalhe
      */
     public function listSegmento()
     {
-        return array(
-            $this->segmento_p
-            , $this->segmento_q
-            , $this->segmento_r
-            , $this->segmento_a
-        );
+        $segmentos = array();
+
+        if(!is_null($this->segmento_p)) {
+            $segmentos[] = $this->segmento_p;
+        }
+        if(!is_null($this->segmento_q)) {
+            $segmentos[] = $this->segmento_q;
+        }
+        if(!is_null($this->segmento_r)) {
+            $segmentos[] = $this->segmento_r;
+        }
+        if(!is_null($this->segmento_a)) {
+            $segmentos[] = $this->segmento_a;
+        }
+
+        return $segmentos;
     }
 
     /**
