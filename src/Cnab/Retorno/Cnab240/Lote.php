@@ -42,6 +42,12 @@ class Lote
             if ($this->lastDetalhe) {
                 $this->lastDetalhe->segmento_w = $segmento;
             }
+        } elseif ('A' == $codigo_segmento) {
+            $segmento = new SegmentoW($this->arquivo);
+            $segmento->loadFromString($linha);
+            if ($this->lastDetalhe) {
+                $this->lastDetalhe->segmento_a = $segmento;
+            }
         }
 
         return $segmento;

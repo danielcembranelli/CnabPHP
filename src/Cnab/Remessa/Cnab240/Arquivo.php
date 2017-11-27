@@ -17,12 +17,14 @@ class Arquivo implements \Cnab\Remessa\IArquivo
     public $configuracao = array();
     public $layoutVersao;
     const   QUEBRA_LINHA = "\r\n";
+    public $tipoRemessa = 'boleto';
 
-    public function __construct($codigo_banco, $layoutVersao = null)
+    public function __construct($codigo_banco, $tipo_remessa = 'boleto', $layoutVersao = null)
     {
         $this->codigo_banco = $codigo_banco;
         $this->layoutVersao = $layoutVersao;
         $this->banco = \Cnab\Banco::getBanco($this->codigo_banco);
+        $this->tipoRemessa = $tipo_remessa;
         //$this->data_gravacao = date('dmY');
     }
 
@@ -53,7 +55,14 @@ class Arquivo implements \Cnab\Remessa\IArquivo
             $campos[] = 'numero_sequencial_arquivo';
         }
 
-
+        if($this->codigo_banco == \Cnab\Banco::ITAU) {
+            $campos[] = 'agencia';
+            $campos[] = 'conta';
+            $campos[] = 'conta_dac';
+            $campos[] = 'agencia_mais_cedente_dv';
+            $campos[] = 'tipo_operacao';
+            $campos[] = 'forma_lancamento';
+        }
 
         foreach ($campos as $campo) {
             if (array_key_exists($campo, $params)) {
@@ -84,7 +93,10 @@ class Arquivo implements \Cnab\Remessa\IArquivo
         $this->headerArquivo->codigo_inscricao = 2;
         $this->headerArquivo->numero_inscricao = $this->prepareText($this->configuracao['cnpj'], '.-/');
         $this->headerArquivo->agencia = $this->configuracao['agencia'];
-        $this->headerArquivo->agencia_dv = $this->configuracao['agencia_dv'];
+
+        if($this->codigo_banco != \Cnab\Banco::ITAU) {
+            $this->headerArquivo->agencia_dv = $this->configuracao['agencia_dv'];
+        }
 
         if($this->codigo_banco == \Cnab\Banco::BANCO_DO_BRASIL) {
             $this->headerArquivo->codigo_convenio = $this->configuracao['codigo_convenio'];
@@ -98,12 +110,20 @@ class Arquivo implements \Cnab\Remessa\IArquivo
             $this->headerArquivo->codigo_cedente = $this->configuracao['codigo_cedente'];
         }
 
+        if($this->codigo_banco == \Cnab\Banco::ITAU) {
+            $this->headerArquivo->conta_debitada = $this->configuracao['conta'];
+            $this->headerArquivo->agencia_mais_cedente_dv = $this->configuracao['agencia_mais_cedente_dv'];
+        }
+
         $this->headerArquivo->nome_empresa = $this->configuracao['nome_fantasia'];
         $this->headerArquivo->nome_banco = $banco['nome_do_banco'];
         $this->headerArquivo->codigo_remessa_retorno = 1;
         $this->headerArquivo->data_geracao = $this->configuracao['data_geracao'];
         $this->headerArquivo->hora_geracao = $this->configuracao['data_geracao'];
-        $this->headerArquivo->numero_sequencial_arquivo = $this->configuracao['numero_sequencial_arquivo'];
+
+        if($this->codigo_banco != \Cnab\Banco::ITAU) {
+            $this->headerArquivo->numero_sequencial_arquivo = $this->configuracao['numero_sequencial_arquivo'];
+        }
 
         if ($this->codigo_banco == \Cnab\Banco::CEF) {
             if($this->layoutVersao === 'sigcb') {
@@ -122,12 +142,26 @@ class Arquivo implements \Cnab\Remessa\IArquivo
 
         $this->headerLote->codigo_banco = $this->headerArquivo->codigo_banco;
         $this->headerLote->lote_servico = 1;
-        $this->headerLote->tipo_operacao = 'R';
+
+        if ($this->codigo_banco == \Cnab\Banco::ITAU) {
+            $this->headerLote->tipo_operacao = $this->configuracao['tipo_operacao'];
+            $this->headerLote->forma_lancamento = $this->configuracao['forma_lancamento'];
+        } else {
+            $this->headerLote->tipo_operacao = 'R';
+        }
+
         $this->headerLote->codigo_inscricao = $this->headerArquivo->codigo_inscricao;
         $this->headerLote->numero_inscricao = $this->headerArquivo->numero_inscricao;
         $this->headerLote->agencia = $this->headerArquivo->agencia;
-        $this->headerLote->agencia_dv = $this->headerArquivo->agencia_dv;
 
+        if ($this->codigo_banco != \Cnab\Banco::ITAU) {
+            $this->headerLote->agencia_dv = $this->headerArquivo->agencia_dv;
+        }
+
+        if ($this->codigo_banco == \Cnab\Banco::ITAU) {
+            $this->headerLote->conta = $this->headerArquivo->conta_debitada;
+            $this->headerLote->dac_agencia_conta = $this->headerArquivo->agencia_mais_cedente_dv;
+        }
 
         if ($this->codigo_banco == \Cnab\Banco::CEF) {
             $this->headerLote->codigo_convenio = $this->headerArquivo->codigo_cedente;
@@ -142,9 +176,14 @@ class Arquivo implements \Cnab\Remessa\IArquivo
             $this->headerLote->conta_dv = $this->headerArquivo->conta_dv;
         }
 
+//         debug($this->headerLote,true);
+
         $this->headerLote->nome_empresa = $this->headerArquivo->nome_empresa;
-        $this->headerLote->numero_sequencial_arquivo = $this->headerArquivo->numero_sequencial_arquivo;
-        $this->headerLote->data_geracao = $this->headerArquivo->data_geracao;
+
+        if ($this->codigo_banco != \Cnab\Banco::ITAU) {
+            $this->headerLote->numero_sequencial_arquivo = $this->headerArquivo->numero_sequencial_arquivo;
+            $this->headerLote->data_geracao = $this->headerArquivo->data_geracao;
+        }
 
         if ($this->codigo_banco == \Cnab\Banco::CEF) {
             $this->headerLote->tipo_servico = 2;
@@ -195,152 +234,179 @@ class Arquivo implements \Cnab\Remessa\IArquivo
         $dateCadastro = $boleto['data_cadastro'] instanceof \DateTime ? $boleto['data_cadastro'] : new \DateTime($boleto['data_cadastro']);
         $dateJurosMora = clone $dateVencimento;
 
-        $detalhe = new Detalhe($this);
+        $detalhe = new Detalhe($this, $this->tipoRemessa);
 
-        // SEGMENTO P -------------------------------
-        $detalhe->segmento_p->codigo_banco = $this->headerArquivo->codigo_banco;
-        $detalhe->segmento_p->lote_servico = $this->headerLote->lote_servico;
-        $detalhe->segmento_p->agencia = $this->headerArquivo->agencia;
-        $detalhe->segmento_p->agencia_dv = $this->headerArquivo->agencia_dv;
+        if($this->tipoRemessa == 'boleto') {
+            // SEGMENTO P -------------------------------
+            $detalhe->segmento_p->codigo_banco = $this->headerArquivo->codigo_banco;
+            $detalhe->segmento_p->lote_servico = $this->headerLote->lote_servico;
+            $detalhe->segmento_p->agencia = $this->headerArquivo->agencia;
+            $detalhe->segmento_p->agencia_dv = $this->headerArquivo->agencia_dv;
 
-        if ($this->codigo_banco == \Cnab\Banco::CEF) {
-            $detalhe->segmento_p->codigo_cedente = $this->headerArquivo->codigo_cedente;
-        }
-
-        if ($this->codigo_banco == \Cnab\Banco::BANCO_DO_BRASIL) {
-            $detalhe->segmento_p->conta = $this->headerArquivo->conta;
-            $detalhe->segmento_p->conta_dv = $this->headerArquivo->conta_dv;
-        }
-
-        $detalhe->segmento_p->nosso_numero = $this->formatarNossoNumero($boleto['nosso_numero']);
-
-        if($this->codigo_banco == \Cnab\Banco::BANCO_DO_BRASIL) {
-            // Informar 1 – para carteira 11/12 na modalidade Simples; 2 ou 3 – para carteira 11/17 modalidade
-            // Vinculada/Caucionada e carteira 31; 4 – para carteira 11/17 modalidade Descontada e carteira 51; e 7 – para
-            // carteira 17 modalidade Simples.
-            if($boleto['carteira'] == 17 && $boleto['codigo_carteira'] == \Cnab\CodigoCarteira::COBRANCA_SIMPLES) {
-                $detalhe->segmento_p->codigo_carteira = 7;
-            } else {
-                $detalhe->segmento_p->codigo_carteira = $boleto['codigo_carteira'];
+            if ($this->codigo_banco == \Cnab\Banco::CEF) {
+                $detalhe->segmento_p->codigo_cedente = $this->headerArquivo->codigo_cedente;
             }
-        }
 
-        if ($this->layoutVersao === 'sigcb' && $this->codigo_banco == \Cnab\Banco::CEF) {
-            $detalhe->segmento_p->codigo_carteira = 1; // 1 = Cobrança Simples
-            $detalhe->segmento_p->modalidade_carteira = $boleto['modalidade_carteira']; // 21 = (título Sem Registro emissão CAIXA)
-        }
+            if ($this->codigo_banco == \Cnab\Banco::BANCO_DO_BRASIL) {
+                $detalhe->segmento_p->conta = $this->headerArquivo->conta;
+                $detalhe->segmento_p->conta_dv = $this->headerArquivo->conta_dv;
+            }
 
-        $detalhe->segmento_p->forma_cadastramento = $boleto['registrado'] ? 1 : 2; // 1 = Com, 2 = Sem Registro
-        if ($boleto['registrado'] && $this->codigo_banco == \Cnab\Banco::CEF) {
-            $this->headerLote->tipo_servico = 1;
-        }
-        $detalhe->segmento_p->numero_documento = $boleto['numero_documento'];
-        $detalhe->segmento_p->vencimento = $dateVencimento;
-        $detalhe->segmento_p->valor_titulo = $boleto['valor'];
-        $detalhe->segmento_p->especie = $boleto['especie']; // 4 = Duplicata serviço
-        $detalhe->segmento_p->aceite = $boleto['aceite'];
-        $detalhe->segmento_p->data_emissao = $dateCadastro;
-        $detalhe->segmento_p->codigo_juros_mora = 1; // 1 = Por dia
+            $detalhe->segmento_p->nosso_numero = $this->formatarNossoNumero($boleto['nosso_numero']);
 
-        if (!empty($boleto['dias_iniciar_contagem_juros']) && is_numeric($boleto['dias_iniciar_contagem_juros'])) {
-            $dateJurosMora->modify("+{$boleto['dias_iniciar_contagem_juros']} days");
-        } else {
-            $dateJurosMora->modify('+1 day');
-        }
-
-        $detalhe->segmento_p->data_juros_mora = $dateJurosMora;
-
-        $detalhe->segmento_p->valor_juros_mora = $boleto['juros_de_um_dia'];
-        if ($boleto['valor_desconto'] > 0) {
-            $detalhe->segmento_p->codigo_desconto_1 = 1; // valor fixo
-            $detalhe->segmento_p->data_desconto_1 = $boleto['data_desconto'];
-            $detalhe->segmento_p->valor_desconto_1 = $boleto['valor_desconto'];
-        } else {
-            $detalhe->segmento_p->codigo_desconto_1 = 0; // sem desconto
-            $detalhe->segmento_p->data_desconto_1 = 0;
-            $detalhe->segmento_p->valor_desconto_1 = 0;
-        }
-        $detalhe->segmento_p->valor_abatimento = 0;
-        $detalhe->segmento_p->uso_empresa = $boleto['numero_documento'];
-
-        if (!empty($boleto['codigo_protesto']) && !empty($boleto['prazo_protesto'])) {
-            $detalhe->segmento_p->codigo_protesto = $boleto['codigo_protesto'];
-            $detalhe->segmento_p->prazo_protesto = $boleto['prazo_protesto'];
-        } else {
-            $detalhe->segmento_p->codigo_protesto = 3; // 3 = Não protestar
-            $detalhe->segmento_p->prazo_protesto = 0;
-        }
-
-        if ($this->codigo_banco == \Cnab\Banco::BANCO_DO_BRASIL) {
-            // Campo não tratado pelo sistema. Informar 'zeros'.
-            // O sistema considera a informação que foi cadastrada na
-            // sua carteira junto ao Banco do Brasil.
-            $detalhe->segmento_p->codigo_baixa = 0;
-            $detalhe->segmento_p->prazo_baixa = 0;
-        } else {
-            if(isset($boleto['baixar_apos_dias'])) {
-                if($boleto['baixar_apos_dias'] === false) {
-                    // não baixar / devolver
-                    $detalhe->segmento_p->codigo_baixa = 2;
-                    $detalhe->segmento_p->prazo_baixa = 0;
+            if($this->codigo_banco == \Cnab\Banco::BANCO_DO_BRASIL) {
+                // Informar 1 – para carteira 11/12 na modalidade Simples; 2 ou 3 – para carteira 11/17 modalidade
+                // Vinculada/Caucionada e carteira 31; 4 – para carteira 11/17 modalidade Descontada e carteira 51; e 7 – para
+                // carteira 17 modalidade Simples.
+                if($boleto['carteira'] == 17 && $boleto['codigo_carteira'] == \Cnab\CodigoCarteira::COBRANCA_SIMPLES) {
+                    $detalhe->segmento_p->codigo_carteira = 7;
                 } else {
-                    // baixa automática
-                    $detalhe->segmento_p->codigo_baixa = 1;
-                    $detalhe->segmento_p->prazo_baixa = $boleto['baixar_apos_dias'];
+                    $detalhe->segmento_p->codigo_carteira = $boleto['codigo_carteira'];
                 }
+            }
+
+            if ($this->layoutVersao === 'sigcb' && $this->codigo_banco == \Cnab\Banco::CEF) {
+                $detalhe->segmento_p->codigo_carteira = 1; // 1 = Cobrança Simples
+                $detalhe->segmento_p->modalidade_carteira = $boleto['modalidade_carteira']; // 21 = (título Sem Registro emissão CAIXA)
+            }
+
+            $detalhe->segmento_p->forma_cadastramento = $boleto['registrado'] ? 1 : 2; // 1 = Com, 2 = Sem Registro
+            if ($boleto['registrado'] && $this->codigo_banco == \Cnab\Banco::CEF) {
+                $this->headerLote->tipo_servico = 1;
+            }
+            $detalhe->segmento_p->numero_documento = $boleto['numero_documento'];
+            $detalhe->segmento_p->vencimento = $dateVencimento;
+            $detalhe->segmento_p->valor_titulo = $boleto['valor'];
+            $detalhe->segmento_p->especie = $boleto['especie']; // 4 = Duplicata serviço
+            $detalhe->segmento_p->aceite = $boleto['aceite'];
+            $detalhe->segmento_p->data_emissao = $dateCadastro;
+            $detalhe->segmento_p->codigo_juros_mora = 1; // 1 = Por dia
+
+            if (!empty($boleto['dias_iniciar_contagem_juros']) && is_numeric($boleto['dias_iniciar_contagem_juros'])) {
+                $dateJurosMora->modify("+{$boleto['dias_iniciar_contagem_juros']} days");
             } else {
+                $dateJurosMora->modify('+1 day');
+            }
+
+            $detalhe->segmento_p->data_juros_mora = $dateJurosMora;
+
+            $detalhe->segmento_p->valor_juros_mora = $boleto['juros_de_um_dia'];
+            if ($boleto['valor_desconto'] > 0) {
+                $detalhe->segmento_p->codigo_desconto_1 = 1; // valor fixo
+                $detalhe->segmento_p->data_desconto_1 = $boleto['data_desconto'];
+                $detalhe->segmento_p->valor_desconto_1 = $boleto['valor_desconto'];
+            } else {
+                $detalhe->segmento_p->codigo_desconto_1 = 0; // sem desconto
+                $detalhe->segmento_p->data_desconto_1 = 0;
+                $detalhe->segmento_p->valor_desconto_1 = 0;
+            }
+            $detalhe->segmento_p->valor_abatimento = 0;
+            $detalhe->segmento_p->uso_empresa = $boleto['numero_documento'];
+
+            if (!empty($boleto['codigo_protesto']) && !empty($boleto['prazo_protesto'])) {
+                $detalhe->segmento_p->codigo_protesto = $boleto['codigo_protesto'];
+                $detalhe->segmento_p->prazo_protesto = $boleto['prazo_protesto'];
+            } else {
+                $detalhe->segmento_p->codigo_protesto = 3; // 3 = Não protestar
+                $detalhe->segmento_p->prazo_protesto = 0;
+            }
+
+            if ($this->codigo_banco == \Cnab\Banco::BANCO_DO_BRASIL) {
+                // Campo não tratado pelo sistema. Informar 'zeros'.
+                // O sistema considera a informação que foi cadastrada na
+                // sua carteira junto ao Banco do Brasil.
                 $detalhe->segmento_p->codigo_baixa = 0;
                 $detalhe->segmento_p->prazo_baixa = 0;
+            } else {
+                if(isset($boleto['baixar_apos_dias'])) {
+                    if($boleto['baixar_apos_dias'] === false) {
+                        // não baixar / devolver
+                        $detalhe->segmento_p->codigo_baixa = 2;
+                        $detalhe->segmento_p->prazo_baixa = 0;
+                    } else {
+                        // baixa automática
+                        $detalhe->segmento_p->codigo_baixa = 1;
+                        $detalhe->segmento_p->prazo_baixa = $boleto['baixar_apos_dias'];
+                    }
+                } else {
+                    $detalhe->segmento_p->codigo_baixa = 0;
+                    $detalhe->segmento_p->prazo_baixa = 0;
+                }
+            }
+
+            if (array_key_exists('identificacao_distribuicao', $boleto)) {
+                $detalhe->segmento_p->identificacao_distribuicao = $boleto['identificacao_distribuicao'];
+            }
+
+            if ($tipo == 'remessa') {
+                $detalhe->segmento_p->codigo_ocorrencia = 1;
+            } elseif ($tipo == 'baixa') {
+                $detalhe->segmento_p->codigo_ocorrencia = 2;
+            } else {
+                throw new \Exception('Tipo de detalhe inválido: '.$tipo);
+            }
+
+            // SEGMENTO Q -------------------------------
+            $detalhe->segmento_q->codigo_banco = $this->headerArquivo->codigo_banco;
+            $detalhe->segmento_q->lote_servico = $this->headerLote->lote_servico;
+            $detalhe->segmento_q->codigo_ocorrencia = $detalhe->segmento_p->codigo_ocorrencia;
+            if (@$boleto['sacado_cnpj']) {
+                $detalhe->segmento_q->sacado_codigo_inscricao = '2';
+                $detalhe->segmento_q->sacado_numero_inscricao = $this->prepareText($boleto['sacado_cnpj'], '.-/');
+                $detalhe->segmento_q->nome = $this->prepareText($boleto['sacado_razao_social']);
+            } else {
+                $detalhe->segmento_q->sacado_codigo_inscricao = '1';
+                $detalhe->segmento_q->sacado_numero_inscricao = $this->prepareText($boleto['sacado_cpf'], '.-/');
+                $detalhe->segmento_q->nome = $this->prepareText($boleto['sacado_nome']);
+            }
+            $detalhe->segmento_q->logradouro = $this->prepareText($boleto['sacado_logradouro']);
+            $detalhe->segmento_q->bairro = $this->prepareText($boleto['sacado_bairro']);
+            $detalhe->segmento_q->cep = str_replace('-', '', $boleto['sacado_cep']);
+            $detalhe->segmento_q->cidade = $this->prepareText($boleto['sacado_cidade']);
+            $detalhe->segmento_q->estado = $boleto['sacado_uf'];
+            // se o titulo for de terceiro, o sacador é o terceiro
+            $detalhe->segmento_q->sacador_codigo_inscricao = $this->headerArquivo->codigo_inscricao;
+            $detalhe->segmento_q->sacador_numero_inscricao = $this->headerArquivo->numero_inscricao;
+            $detalhe->segmento_q->sacador_nome = $this->headerArquivo->nome_empresa;
+
+            // SEGMENTO R -------------------------------
+            $detalhe->segmento_r->codigo_banco = $detalhe->segmento_p->codigo_banco;
+            $detalhe->segmento_r->lote_servico = $detalhe->segmento_p->lote_servico;
+            $detalhe->segmento_r->codigo_ocorrencia = $detalhe->segmento_p->codigo_ocorrencia;
+            if ($boleto['valor_multa'] > 0) {
+                $detalhe->segmento_r->codigo_multa = 1;
+                $detalhe->segmento_r->valor_multa = $boleto['valor_multa'];
+                $detalhe->segmento_r->data_multa = $boleto['data_multa'];
+            } else {
+                $detalhe->segmento_r->codigo_multa = 0;
+                $detalhe->segmento_r->valor_multa = 0;
+                $detalhe->segmento_r->data_multa = 0;
             }
         }
 
-        if (array_key_exists('identificacao_distribuicao', $boleto)) {
-            $detalhe->segmento_p->identificacao_distribuicao = $boleto['identificacao_distribuicao'];
-        }
-
-        if ($tipo == 'remessa') {
-            $detalhe->segmento_p->codigo_ocorrencia = 1;
-        } elseif ($tipo == 'baixa') {
-            $detalhe->segmento_p->codigo_ocorrencia = 2;
-        } else {
-            throw new \Exception('Tipo de detalhe inválido: '.$tipo);
-        }
-
-        // SEGMENTO Q -------------------------------
-        $detalhe->segmento_q->codigo_banco = $this->headerArquivo->codigo_banco;
-        $detalhe->segmento_q->lote_servico = $this->headerLote->lote_servico;
-        $detalhe->segmento_q->codigo_ocorrencia = $detalhe->segmento_p->codigo_ocorrencia;
-        if (@$boleto['sacado_cnpj']) {
-            $detalhe->segmento_q->sacado_codigo_inscricao = '2';
-            $detalhe->segmento_q->sacado_numero_inscricao = $this->prepareText($boleto['sacado_cnpj'], '.-/');
-            $detalhe->segmento_q->nome = $this->prepareText($boleto['sacado_razao_social']);
-        } else {
-            $detalhe->segmento_q->sacado_codigo_inscricao = '1';
-            $detalhe->segmento_q->sacado_numero_inscricao = $this->prepareText($boleto['sacado_cpf'], '.-/');
-            $detalhe->segmento_q->nome = $this->prepareText($boleto['sacado_nome']);
-        }
-        $detalhe->segmento_q->logradouro = $this->prepareText($boleto['sacado_logradouro']);
-        $detalhe->segmento_q->bairro = $this->prepareText($boleto['sacado_bairro']);
-        $detalhe->segmento_q->cep = str_replace('-', '', $boleto['sacado_cep']);
-        $detalhe->segmento_q->cidade = $this->prepareText($boleto['sacado_cidade']);
-        $detalhe->segmento_q->estado = $boleto['sacado_uf'];
-        // se o titulo for de terceiro, o sacador é o terceiro
-        $detalhe->segmento_q->sacador_codigo_inscricao = $this->headerArquivo->codigo_inscricao;
-        $detalhe->segmento_q->sacador_numero_inscricao = $this->headerArquivo->numero_inscricao;
-        $detalhe->segmento_q->sacador_nome = $this->headerArquivo->nome_empresa;
-
-        // SEGMENTO R -------------------------------
-        $detalhe->segmento_r->codigo_banco = $detalhe->segmento_p->codigo_banco;
-        $detalhe->segmento_r->lote_servico = $detalhe->segmento_p->lote_servico;
-        $detalhe->segmento_r->codigo_ocorrencia = $detalhe->segmento_p->codigo_ocorrencia;
-        if ($boleto['valor_multa'] > 0) {
-            $detalhe->segmento_r->codigo_multa = 1;
-            $detalhe->segmento_r->valor_multa = $boleto['valor_multa'];
-            $detalhe->segmento_r->data_multa = $boleto['data_multa'];
-        } else {
-            $detalhe->segmento_r->codigo_multa = 0;
-            $detalhe->segmento_r->valor_multa = 0;
-            $detalhe->segmento_r->data_multa = 0;
+        if($this->tipoRemessa == 'TED') {
+            // SEGMENTO A
+            $detalhe->segmento_a->codigo_banco = $this->headerArquivo->codigo_banco;
+            $detalhe->segmento_a->lote_servico = $this->headerLote->lote_servico;
+            $detalhe->segmento_a->numero_sequencial_lote = $boleto['numero_sequencial_lote'];
+            $detalhe->segmento_a->banco_favorecido = $boleto['banco_favorecido'];
+            $detalhe->segmento_a->agencia_favorecido = $boleto['agencia_favorecido'];
+            $detalhe->segmento_a->conta_favorecido = $boleto['conta_favorecido'];
+//             $detalhe->segmento_a->conta_dv_favorecido = $boleto['conta_dv_favorecido'];
+            $detalhe->segmento_a->agencia_conta_dv_favorecido = $boleto['agencia_conta_dv_favorecido'];
+            $detalhe->segmento_a->nome_favorecido = $this->prepareText($boleto['nome_favorecido']);
+            $detalhe->segmento_a->numero_documento = $boleto['numero_documento'];
+            $detalhe->segmento_a->numero_documento_retorno = $boleto['numero_documento_retorno'];
+            $detalhe->segmento_a->data_pagamento = $boleto['data_pagamento']  instanceof \DateTime ? $boleto['data_pagamento'] : new \DateTime($boleto['data_pagamento']);
+//             $detalhe->segmento_a->data_real = $boleto['data_real']  instanceof \DateTime ? $boleto['data_real'] : new \DateTime($boleto['data_real']);
+            $detalhe->segmento_a->valor_pagamento = $boleto['valor_pagamento'];
+//             $detalhe->segmento_a->valor_real = $boleto['valor_real'];
+            $detalhe->segmento_a->informacao_2 = $boleto['informacao_2'];
+            if (@$boleto['sacado_cnpj']) {
+                $detalhe->segmento_a->numero_inscricao_favorecido = $this->prepareText($boleto['sacado_cnpj'], '.-/');
+            } else {
+                $detalhe->segmento_a->numero_inscricao_favorecido = $this->prepareText($boleto['sacado_cpf'], '.-/');
+            }
         }
 
         $this->detalhes[] = $detalhe;
@@ -463,7 +529,15 @@ class Arquivo implements \Cnab\Remessa\IArquivo
 
         foreach ($this->detalhes as $detalhe) {
             ++$qtde_titulo_cobranca_simples;
-            $valor_total_titulo_simples += $detalhe->segmento_p->valor_titulo;
+
+            if($this->tipoRemessa == 'TED') {
+                $valor_total_titulo_simples += $detalhe->segmento_a->valor_pagamento;
+            }
+
+            if($this->tipoRemessa == 'boleto') {
+                $valor_total_titulo_simples += $detalhe->segmento_p->valor_titulo;
+            }
+
             foreach ($detalhe->listSegmento() as $segmento) {
                 ++$qtde_registro_lote;
                 $segmento->numero_sequencial_lote = $numero_sequencial_lote++;
@@ -477,6 +551,10 @@ class Arquivo implements \Cnab\Remessa\IArquivo
         }
 
         $this->trailerLote->qtde_registro_lote = $qtde_registro_lote;
+
+        if ($this->codigo_banco == \Cnab\Banco::ITAU) {
+            $this->trailerLote->valor_total_titulo_simples = $valor_total_titulo_simples;
+        }
 
         if ($this->codigo_banco == \Cnab\Banco::CEF) {
             $this->trailerLote->qtde_titulo_cobranca_simples = $qtde_titulo_cobranca_simples;
@@ -509,12 +587,16 @@ class Arquivo implements \Cnab\Remessa\IArquivo
         return count($this->detalhes);
     }
 
-    public function save($filename)
+    public function save($filename, $path = NULL)
     {
         $text = $this->getText();
 
-        file_put_contents($filename, $text);
+        $filePath = $filename;
+        if(!is_null($path)) {
+            $filePath = $path . $filename;
+        }
 
+        file_put_contents($filePath, $text);
         return $filename;
     }
 }

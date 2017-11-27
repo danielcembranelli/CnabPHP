@@ -4,17 +4,23 @@ namespace Cnab\Remessa\Cnab240;
 
 class Detalhe
 {
-    public $segmento_p;
-    public $segmento_q;
-    public $segmento_r;
+    public $segmento_p = NULL;
+    public $segmento_q = NULL;
+    public $segmento_r = NULL;
+    public $segmento_a = NULL;
 
     public $last_error;
 
-    public function __construct(\Cnab\Remessa\IArquivo $arquivo)
-    {
-        $this->segmento_p = new SegmentoP($arquivo);
-        $this->segmento_q = new SegmentoQ($arquivo);
-        $this->segmento_r = new SegmentoR($arquivo);
+    public function __construct(\Cnab\Remessa\IArquivo $arquivo, $tipo_remessa) {
+        if($tipo_remessa == 'boleto') {
+            $this->segmento_p = new SegmentoP($arquivo);
+            $this->segmento_q = new SegmentoQ($arquivo);
+            $this->segmento_r = new SegmentoR($arquivo);
+        }
+
+        if($tipo_remessa == 'TED') {
+            $this->segmento_a = new SegmentoA($arquivo);
+        }
     }
 
     public function validate()
@@ -36,11 +42,22 @@ class Detalhe
      */
     public function listSegmento()
     {
-        return array(
-            $this->segmento_p,
-            $this->segmento_q,
-            $this->segmento_r,
-        );
+        $segmentos = array();
+
+        if(!is_null($this->segmento_p)) {
+            $segmentos[] = $this->segmento_p;
+        }
+        if(!is_null($this->segmento_q)) {
+            $segmentos[] = $this->segmento_q;
+        }
+        if(!is_null($this->segmento_r)) {
+            $segmentos[] = $this->segmento_r;
+        }
+        if(!is_null($this->segmento_a)) {
+            $segmentos[] = $this->segmento_a;
+        }
+
+        return $segmentos;
     }
 
     /**
