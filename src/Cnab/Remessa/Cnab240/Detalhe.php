@@ -11,7 +11,7 @@ class Detalhe
 
     public $last_error;
 
-    public function __construct(\Cnab\Remessa\IArquivo $arquivo, $tipo_remessa) {
+    public function __construct(\Cnab\Remessa\IArquivo $arquivo) {
         //if($tipo_remessa == 'boleto') {
             $this->segmento_p = new SegmentoP($arquivo);
             $this->segmento_q = new SegmentoQ($arquivo);
