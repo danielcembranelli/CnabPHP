@@ -30,7 +30,7 @@ interface IArquivo
      *
      * @param string $filename nome do arquivo que será criado
      */
-    public function save($filename, $path = NULL);
+    public function save($filename);
 
     /**
      * Retorna o texto que será salvo no arquivo de texto da remessa.

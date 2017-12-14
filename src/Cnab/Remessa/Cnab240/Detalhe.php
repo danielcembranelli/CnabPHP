@@ -12,15 +12,15 @@ class Detalhe
     public $last_error;
 
     public function __construct(\Cnab\Remessa\IArquivo $arquivo, $tipo_remessa) {
-        if($tipo_remessa == 'boleto') {
+        //if($tipo_remessa == 'boleto') {
             $this->segmento_p = new SegmentoP($arquivo);
             $this->segmento_q = new SegmentoQ($arquivo);
             $this->segmento_r = new SegmentoR($arquivo);
-        }
+       // }
 
-        if($tipo_remessa == 'TED') {
-            $this->segmento_a = new SegmentoA($arquivo);
-        }
+        //if($tipo_remessa == 'TED') {
+        //    $this->segmento_a = new SegmentoA($arquivo);
+        //}
     }
 
     public function validate()
