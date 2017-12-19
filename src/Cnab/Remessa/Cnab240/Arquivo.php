@@ -399,9 +399,15 @@ class Arquivo implements \Cnab\Remessa\IArquivo
         $detalhe->segmento_q->cidade = $this->prepareText($boleto['sacado_cidade']);
         $detalhe->segmento_q->estado = $boleto['sacado_uf'];
         // se o titulo for de terceiro, o sacador é o terceiro
-        $detalhe->segmento_q->sacador_codigo_inscricao = $this->headerArquivo->codigo_inscricao;
-        $detalhe->segmento_q->sacador_numero_inscricao = $this->headerArquivo->numero_inscricao;
-        $detalhe->segmento_q->sacador_nome = $this->headerArquivo->nome_empresa;
+        if(isset($boleto['sacador_nome'])){
+            $detalhe->segmento_q->sacador_codigo_inscricao = $this->headerArquivo->codigo_inscricao;
+            $detalhe->segmento_q->sacador_numero_inscricao = $this->headerArquivo->numero_inscricao;
+            $detalhe->segmento_q->sacador_nome = $this->headerArquivo->nome_empresa;
+        } else {
+            $detalhe->segmento_q->sacador_codigo_inscricao = 0;
+            $detalhe->segmento_q->sacador_numero_inscricao = 0;
+            $detalhe->segmento_q->sacador_nome ='';
+        }
 
         // SEGMENTO R -------------------------------
         $detalhe->segmento_r->codigo_banco = $detalhe->segmento_p->codigo_banco;
