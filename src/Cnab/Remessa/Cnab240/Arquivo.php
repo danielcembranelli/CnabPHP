@@ -74,6 +74,17 @@ class Arquivo implements \Cnab\Remessa\IArquivo
             $campos[] = 'codigo_convenio';
         }
 
+        if ($this->codigo_banco == \Cnab\Banco::SICOOB) {
+            $campos[] = 'codigo_cedente';
+            $campos[] = 'agencia';
+            $campos[] = 'agencia_dv';
+            $campos[] = 'conta';
+            $campos[] = 'conta_dv';
+            $campos[] = 'numero_sequencial_arquivo';
+            $campos[] = 'codigo_convenio';
+            //$campos[]='codigo_cedente_dv';
+        }
+
         foreach ($campos as $campo) {
             if (array_key_exists($campo, $params)) {
                 if (strpos($campo, 'data_') === 0 && !($params[$campo] instanceof \DateTime)) {
@@ -108,6 +119,18 @@ class Arquivo implements \Cnab\Remessa\IArquivo
         $this->headerArquivo->agencia = $this->configuracao['agencia'];
         $this->headerArquivo->agencia_dv = $this->configuracao['agencia_dv'];
         
+        }
+        if ($this->codigo_banco == \Cnab\Banco::SICOOB) {
+            $this->headerArquivo->codigo_convenio = '        ';
+           $this->headerArquivo->codigo_cedente = $this->configuracao['conta'];
+            $this->headerArquivo->agencia = $this->configuracao['agencia'];
+            $this->headerArquivo->agencia_dv = $this->configuracao['agencia_dv'];
+            //$this->headerArquivo->conta = $this->configuracao['conta'];
+            //$this->headerArquivo->conta_dv = $this->configuracao['conta_dv'];
+            $this->headerArquivo->codigo_cedente_dv = $this->configuracao['conta_dv'];
+            $this->headerArquivo->agencia_mais_cedente_dv = 0;
+            $this->headerArquivo->hora_geracao = "141330";//$this->configuracao['hora_geracao'];
+
         }
 
         if ($this->codigo_banco == \Cnab\Banco::BANCO_DO_BRASIL) {
@@ -183,6 +206,21 @@ class Arquivo implements \Cnab\Remessa\IArquivo
             $this->headerLote->conta_dv = $this->headerArquivo->conta_dv;
         }
 
+
+        if ($this->codigo_banco == \Cnab\Banco::SICOOB) {
+            //$this->headerLote->codigo_convenio =  $this->configuracao['conta'];
+            $this->headerLote->codigo_cedente =  $this->configuracao['conta'];
+            $this->headerLote->agencia = $this->configuracao['agencia'];
+            $this->headerLote->agencia_dv = $this->configuracao['agencia_dv'];
+            //$this->headerArquivo->conta = $this->configuracao['conta'];
+            //$this->headerArquivo->conta_dv = $this->configuracao['conta_dv'];
+            $this->headerLote->codigo_cedente_dv = $this->configuracao['conta_dv'];
+            $this->headerLote->agencia_mais_cedente_dv = 0;
+            //$this->headerLote->hora_geracao = "141330";//$this->configuracao['hora_geracao'];
+
+        }
+
+
         if ($this->codigo_banco == \Cnab\Banco::BANRISUL) {
             $this->headerLote->codigo_convenio = $this->headerArquivo->codigo_convenio;
             $this->headerLote->conta = $this->headerArquivo->conta;
@@ -238,6 +276,7 @@ class Arquivo implements \Cnab\Remessa\IArquivo
 
     public function insertDetalhe(array $boleto, $tipo = 'remessa')
     {
+        //dd($boleto);
         $dateVencimento = $boleto['data_vencimento'] instanceof \DateTime ? $boleto['data_vencimento'] : new \DateTime($boleto['data_vencimento']);
         $dateCadastro = $boleto['data_cadastro'] instanceof \DateTime ? $boleto['data_cadastro'] : new \DateTime($boleto['data_cadastro']);
         $dateJurosMora = clone $dateVencimento;
@@ -286,6 +325,18 @@ class Arquivo implements \Cnab\Remessa\IArquivo
 
         if ($this->codigo_banco == \Cnab\Banco::SANTANDER) {
             $detalhe->segmento_p->codigo_carteira = $boleto['carteira'];
+        }
+        if ($this->codigo_banco == \Cnab\Banco::SICOOB) {
+            $detalhe->segmento_p->codigo_cedente = $this->headerArquivo->codigo_cedente;
+            $detalhe->segmento_p->codigo_cedente_dv = $this->headerArquivo->codigo_cedente_dv;
+            $detalhe->segmento_p->codigo_carteira =1;
+
+            //$detalhe->segmento_p->parcela='01';
+            //$detalhe->segmento_p->modalidade='01';
+            //$detalhe->segmento_p->tipo_formulario='4';
+
+
+
         }
 
         if ($this->codigo_banco == \Cnab\Banco::BANRISUL) {
@@ -398,6 +449,11 @@ class Arquivo implements \Cnab\Remessa\IArquivo
         $detalhe->segmento_q->cep = str_replace('-', '', $boleto['sacado_cep']);
         $detalhe->segmento_q->cidade = $this->prepareText($boleto['sacado_cidade']);
         $detalhe->segmento_q->estado = $boleto['sacado_uf'];
+
+        if ($this->codigo_banco == \Cnab\Banco::SICOOB) {
+        $detalhe->segmento_q->uso_exclusivo_febraban_02="000";
+        }
+
         // se o titulo for de terceiro, o sacador é o terceiro
         if(isset($boleto['sacador_nome'])){
             $detalhe->segmento_q->sacador_codigo_inscricao = $this->headerArquivo->codigo_inscricao;
@@ -592,9 +648,26 @@ class Arquivo implements \Cnab\Remessa\IArquivo
 
         $this->trailerLote->qtde_registro_lote = $qtde_registro_lote;
 
-        if ($this->codigo_banco == \Cnab\Banco::CEF || $this->codigo_banco == \Cnab\Banco::BANRISUL) {
+        if ($this->codigo_banco == \Cnab\Banco::CEF || $this->codigo_banco == \Cnab\Banco::BANRISUL || $this->codigo_banco == \Cnab\Banco::SICOOB ) {
             $this->trailerLote->qtde_titulo_cobranca_simples = $qtde_titulo_cobranca_simples;
             $this->trailerLote->valor_total_titulo_simples = $valor_total_titulo_simples;
+        }
+
+        if ($this->codigo_banco == \Cnab\Banco::SICOOB ) {
+            $this->trailerLote->qtde_titulo_cobranca_caucionada = 0;
+            $this->trailerLote->valor_total_titulo_caucionada = 0;
+
+            $this->trailerLote->qtde_titulo_cobranca_descontada = 0;
+            $this->trailerLote->valor_total_titulo_descontada = 0;
+
+            $this->trailerLote->uso_exclusivo_febraban_02 = "000000";
+            //$this->trailerLote->valor_total_titulo_vinculada = 0;
+
+            $this->trailerArquivo->uso_exclusivo_febraban02="000000";
+
+
+            
+            
         }
 
         $this->trailerArquivo->qtde_lotes = 1;

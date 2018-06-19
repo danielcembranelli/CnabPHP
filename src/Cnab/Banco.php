@@ -10,6 +10,7 @@ class Banco
     const BRADESCO = 237;
     const ITAU = 341;
     const BANRISUL = 41;
+    const SICOOB = 756;
 
     public static function getBanco($codigo)
     {
@@ -43,6 +44,11 @@ class Banco
                 'codigo_do_banco' => self::BANRISUL,
                 'nome_do_banco' => 'BANRISUL',
             );
+        } elseif ($codigo == self::SICOOB) {
+            return array(
+                'codigo_do_banco' => self::SICOOB,
+                'nome_do_banco' => 'SICOOB',
+            );    
         } else {
             return false;
         }
